@@ -57,7 +57,15 @@ impl Db {
             .execute(&mut c)?;
         Ok(())
     }
-
+    pub fn find_instance_by_id(&self, id_: i32) -> Result<Option<TaskInstance>, ServiceError> {
+        use crate::schema::instances::dsl::*;
+        let mut conn = self.get_conn()?;
+        let row = instances
+            .filter(id.eq(id_))
+            .first::<RowInstance>(&mut conn)
+            .optional()?;
+        Ok(row.map(|r| r.into()))
+    }
     pub fn find_by_port(&self, port_: i32) -> Result<Option<TaskInstance>, ServiceError> {
         use crate::schema::instances::dsl::*;
         let mut c = self.get_conn()?;

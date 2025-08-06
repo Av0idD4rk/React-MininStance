@@ -47,11 +47,32 @@ impl Deployer {
         Ok(saved)
     }
 
-    pub async fn stop(&mut self, instance: &TaskInstance) -> Result<(), DeployError> {
-        self.docker.stop_container(&instance.container_id).await?;
-        self.ports.release_port(instance.port).await?;
+    pub async fn stop(&mut self, inst: &TaskInstance) -> Result<(), DeployError> {
+        let _ = self.docker.stop_container(&inst.container_id).await;
+        self.docker.remove_container(&inst.container_id).await?;
+        self.ports.release_port(inst.port).await?;
         self.db
-            .update_instance(instance.id, InstanceStatus::Stopped, Utc::now())?;
+            .update_instance(inst.id, InstanceStatus::Stopped, Utc::now())?;
+        Ok(())
+    }
+    pub async fn restart(&mut self, inst: &TaskInstance) -> Result<(), DeployError> {
+        self.docker.restart_container(&inst.container_id).await?;
+
+        let new_expiry = compute_expiry(get_config().ports.default_ttl_secs);
+        self.db
+            .update_instance(inst.id, InstanceStatus::Running, new_expiry)?;
+        Ok(())
+    }
+
+    pub async fn extend(
+        &mut self,
+        inst: &TaskInstance,
+        extra_ttl_secs: u64,
+    ) -> Result<(), DeployError> {
+        self.ports.extend_port(inst.port, extra_ttl_secs).await?;
+
+        let new_expiry = compute_expiry(extra_ttl_secs);
+        self.db.update_instance(inst.id, inst.status, new_expiry)?;
         Ok(())
     }
 }

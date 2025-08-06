@@ -1,16 +1,18 @@
 use crate::error::DeployError;
 use bollard::Docker;
-use bollard::query_parameters::{CreateContainerOptions, RemoveContainerOptions, StartContainerOptions, StopContainerOptions};
-use bollard::query_parameters::BuildImageOptions;
+use bollard::auth::DockerCredentials;
 use bollard::models::{ContainerCreateBody, HostConfig, PortBinding};
-use futures_util::{TryStreamExt, Stream};
+use bollard::query_parameters::{BuildImageOptions, RestartContainerOptions};
+use bollard::query_parameters::{
+    CreateContainerOptions, RemoveContainerOptions, StartContainerOptions, StopContainerOptions,
+};
+use bytes::Bytes;
+use futures_util::{Stream, TryStreamExt};
+use http_body_util::{Either, Full, StreamBody};
+use hyper::body::Frame;
 use std::collections::HashMap;
 use std::io;
 use std::pin::Pin;
-use bollard::auth::DockerCredentials;
-use bytes::Bytes;
-use hyper::body::{Frame};
-use http_body_util::{Either, Full, StreamBody};
 use tar::Builder as TarBuilder;
 
 type BodyType = Either<
@@ -28,11 +30,7 @@ impl DockerClient {
         Self { inner: docker }
     }
 
-    pub async fn build_image(
-        &self,
-        task_name: &str,
-        tag: &str,
-    ) -> Result<(), DeployError> {
+    pub async fn build_image(&self, task_name: &str, tag: &str) -> Result<(), DeployError> {
         let options = BuildImageOptions {
             dockerfile: "Dockerfile".to_string(),
             t: Some(tag.to_string()),
@@ -49,9 +47,11 @@ impl DockerClient {
         let full = Full::from(Bytes::from(tar_buf));
         let body: BodyType = Either::Left(full);
 
-        let mut build_stream = self
-            .inner
-            .build_image(options, None::<HashMap<String, DockerCredentials>>, Some(body));
+        let mut build_stream = self.inner.build_image(
+            options,
+            None::<HashMap<String, DockerCredentials>>,
+            Some(body),
+        );
 
         while let Some(chunk) = build_stream.try_next().await? {
             if let Some(err_msg) = chunk.error {
@@ -98,10 +98,28 @@ impl DockerClient {
     }
 
     pub async fn stop_container(&self, container_id: &str) -> Result<(), DeployError> {
-        let _ = self.inner.stop_container(container_id, None::<StopContainerOptions>).await;
-        let _ = self.inner.remove_container(container_id, None::<RemoveContainerOptions>).await;
+        let _ = self
+            .inner
+            .stop_container(container_id, None::<StopContainerOptions>)
+            .await;
+        Ok(())
+    }
+    pub async fn remove_container(&self, container_id: &str) -> Result<(), DeployError> {
+        let _ = self
+            .inner
+            .remove_container(
+                container_id,
+                Some(RemoveContainerOptions {
+                    force: true,
+                    ..Default::default()
+                }),
+            )
+            .await;
+        Ok(())
+    }
+
+    pub async fn restart_container(&self, container_id: &str) -> Result<(), DeployError> {
+        self.inner.restart_container(container_id, None::<RestartContainerOptions>).await?;
         Ok(())
     }
 }
-
-

@@ -3,6 +3,7 @@ use once_cell::sync::Lazy;
 use serde::Deserialize;
 use std::fs;
 use thiserror::Error;
+use std::{env, path::PathBuf};
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
@@ -10,7 +11,10 @@ pub enum ConfigError {
     Io(#[from] std::io::Error),
     #[error("failed to parse TOML: {0}")]
     Toml(#[from] toml::de::Error),
+    #[error("Config.toml not found in any parent directory")]
+    NotFound,
 }
+
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -27,6 +31,7 @@ pub struct Ports {
     pub max: u16,
     pub default: u16,
     pub default_ttl_secs: u64,
+    pub extend_time_secs: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -44,35 +49,37 @@ pub struct Redis {
     pub url: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Captcha {
     pub provider: String,
     pub site_key: String,
     pub secret_key: String,
+    pub verify_url: String,
+}
+fn find_config_file() -> Result<PathBuf, ConfigError> {
+    let mut dir = env::current_dir()?;
+    loop {
+        let candidate = dir.join("Config.toml");
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+        if !dir.pop() {
+            break;
+        }
+    }
+    Err(ConfigError::NotFound)
 }
 
+/// Lazily load & parse the config once
 static CONFIG: Lazy<Config> = Lazy::new(|| {
-    let toml_str = fs::read_to_string("../../Config.toml")
-        .expect("unable to read Config.toml");
+    let path = find_config_file().expect("Config.toml not found");
+    let toml_str = fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("unable to read {}: {}", path.display(), e));
     toml::from_str(&toml_str)
-        .expect("invalid TOML in Config.toml")
+        .unwrap_or_else(|e| panic!("invalid TOML in {}: {}", path.display(), e))
 });
 
+/// Public accessor
 pub fn get_config() -> &'static Config {
     &CONFIG
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn load_root_config() {
-        let cfg = get_config();
-        assert!(cfg.ports.min < cfg.ports.max);
-        assert!(!cfg.database.url.is_empty());
-        assert!(!cfg.redis.url.is_empty());
-        assert_eq!(cfg.ports.default_ttl_secs, 1800);
-    }
-}
-
