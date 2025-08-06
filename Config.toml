@@ -26,21 +26,21 @@ max_instances = 5
 
 
 [routing]
-variant        = "port"         # or "traefik"
+variant        = "traefik"         # or "traefik"
 domain         = "localhost"    # for port-variant
-traefik_domain = "ctf.local"    # for traefik-variant
+traefik_domain = "ctf.av0idd4rk.ru"    # for traefik-variant
 http_entry     = "web"          # traefik HTTP entrypoint name
 tcp_entry      = "tcp"          # traefik TCP entrypoint name
 
 # Global defaults (optional, task entries override)
 [tasks._default]
 protocol       = "http"         # "http" or "tcp"
-container_port = 3000
+container_port = 80
 
 # Per-task overrides:
 [tasks.foo_task]
 protocol       = "http"
-container_port = 3000
+container_port = 80
 
 [tasks.bar_pwn]
 protocol       = "tcp"
