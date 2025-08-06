@@ -1,0 +1,11 @@
+[workspace]
+members = [
+    "crates/api_gateway",
+    "crates/auth_captcha",
+    "crates/deploy_service",
+    "crates/port_manager",
+    "crates/scheduler_service",
+    "crates/data_models",
+    "crates/common",
+    "crates/config_manager",
+]
