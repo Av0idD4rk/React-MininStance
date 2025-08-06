@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use actix_web::http::StatusCode;
 use thiserror::Error;
 use uuid::Uuid;
-
+use common::TaskInstance;
 use crate::auth::AuthUser;
 use config_manager::get_config;
 use data_models::Db;
@@ -68,6 +68,12 @@ pub struct InstanceListItem {
     status: String,
 }
 
+#[derive(Serialize)]
+pub struct DeployResp {
+    pub instance: TaskInstance,
+    pub endpoint:  String,
+}
+
 pub async fn deploy(
     auth: AuthUser,
     body: web::Json<DeployReq>,
@@ -82,10 +88,14 @@ pub async fn deploy(
     }
 
     let mut d = deployer.lock().unwrap();
-    let inst = d.deploy(&body.task).await?;
+    let dr = d.deploy(&body.task).await?;
 
-    let saved = db.create_instance_for_user(&inst, user_id)?;
-    Ok(HttpResponse::Ok().json(saved))
+    // persist under user:
+    let saved = db.create_instance_for_user(&dr.instance, auth.0.id)?;
+    Ok(HttpResponse::Ok().json(DeployResp{
+        instance: saved,
+        endpoint: dr.endpoint,
+    }))
 }
 
 pub async fn stop(

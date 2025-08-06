@@ -16,8 +16,29 @@ pub enum ConfigError {
 }
 
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
+pub struct RoutingConfig {
+    pub variant: String,           // "port" | "traefik"
+    pub domain: String,            // e.g. "localhost"
+    pub traefik_domain: String,    // e.g. "ctf.local"
+    pub http_entry: String,        // e.g. "web"
+    pub tcp_entry: String,         // e.g. "tcp"
+}
+
+#[derive(Deserialize)]
+pub struct TaskConfig {
+    #[serde(default="default_protocol")]
+    pub protocol: String,
+    #[serde(default="default_cport")]
+    pub container_port: u16,
+}
+fn default_protocol() -> String { "http".into() }
+fn default_cport()   -> u16    { 3000 }
+
+#[derive(Deserialize)]
 pub struct Config {
+    pub routing: RoutingConfig,
+    pub tasks: std::collections::HashMap<String, TaskConfig>,
     pub ports: Ports,
     pub database: Database,
     pub redis: Redis,
@@ -56,7 +77,6 @@ pub struct Sessions {
     pub max_instances: u16,
 }
 
-
 #[derive(Clone, Debug, Deserialize)]
 pub struct Captcha {
     pub provider: String,
@@ -64,6 +84,7 @@ pub struct Captcha {
     pub secret_key: String,
     pub verify_url: String,
 }
+
 fn find_config_file() -> Result<PathBuf, ConfigError> {
     let mut dir = env::current_dir()?;
     loop {

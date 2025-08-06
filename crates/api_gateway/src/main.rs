@@ -1,5 +1,6 @@
 mod handlers;
 mod auth;
+mod routing;
 
 use actix_web::{App, HttpServer};
 use common::init_logging;

@@ -1,6 +1,20 @@
 networks:
   data: {}
 services:
+  traefik:
+    image: traefik:latest
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entryPoints.web.address=:80"
+      - "--entryPoints.tcp.address=:9000"
+    ports:
+      - "80:80"
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - data
   postgres:
     image: postgres:17
     environment:

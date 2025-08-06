@@ -21,7 +21,7 @@ type BodyType = Either<
 >;
 
 pub struct DockerClient {
-    inner: Docker,
+    inner: Docker, // keep this private
 }
 
 impl DockerClient {
@@ -60,61 +60,33 @@ impl DockerClient {
         }
         Ok(())
     }
+    pub async fn create_container(
+        &self,
+        opts: CreateContainerOptions,
+        body: ContainerCreateBody,
+    ) -> Result<String, DeployError> {
+        let info = self.inner.create_container(Some(opts), body).await?;
+        Ok(info.id)
+    }
     pub async fn start_container(
         &self,
-        tag: &str,
-        host_port: u16,
-        container_port: &str,
-    ) -> Result<String, DeployError> {
-        let mut bindings = HashMap::new();
-        bindings.insert(
-            format!("{}/tcp", container_port),
-            Some(vec![PortBinding {
-                host_ip: Some("0.0.0.0".into()),
-                host_port: Some(host_port.to_string()),
-            }]),
-        );
-
-        let opts = CreateContainerOptions {
-            name: Some(tag.to_string()),
-            platform: "".to_string(),
-        };
-
-        let create_body = ContainerCreateBody {
-            image: Some(tag.to_string()),
-            host_config: Some(HostConfig {
-                port_bindings: Some(bindings),
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-
-        let container = self.inner.create_container(Some(opts), create_body).await?;
-        let id = container.id.clone();
-        self.inner
-            .start_container(&id, None::<StartContainerOptions>)
-            .await?;
-        Ok(id)
+        container_id: &str,
+        options: Option<StartContainerOptions>,
+    ) -> Result<(), DeployError> {
+        self.inner.start_container(container_id, options).await?;
+        Ok(())
     }
 
     pub async fn stop_container(&self, container_id: &str) -> Result<(), DeployError> {
-        let _ = self
-            .inner
-            .stop_container(container_id, None::<StopContainerOptions>)
-            .await;
+        let _ = self.inner.stop_container(container_id, None::<StopContainerOptions>).await;
         Ok(())
     }
+
     pub async fn remove_container(&self, container_id: &str) -> Result<(), DeployError> {
-        let _ = self
-            .inner
-            .remove_container(
-                container_id,
-                Some(RemoveContainerOptions {
-                    force: true,
-                    ..Default::default()
-                }),
-            )
-            .await;
+        let _ = self.inner.remove_container(
+            container_id,
+            Some(RemoveContainerOptions { force: true, ..Default::default() }),
+        ).await;
         Ok(())
     }
 
