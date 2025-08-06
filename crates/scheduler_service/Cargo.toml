@@ -4,3 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+tokio = { version = "1.47.1", features = ["rt","macros"] }
+redis = { version = "0.32.4", features = ["aio","tokio-comp"] }
+config_manager = { path = "../config_manager" }
+port_manager    = { path = "../port_manager" }
+deploy_service  = { path = "../deploy_service" }
+data_models     = { path = "../data_models" }
+common          = { path = "../common" }
+thiserror       = "2.0.12"
+tracing         = "0.1.41"
+chrono = "0.4.41"

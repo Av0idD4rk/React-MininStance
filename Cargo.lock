@@ -1183,6 +1183,18 @@ dependencies = [
 [[package]]
 name = "scheduler_service"
 version = "0.1.0"
+dependencies = [
+ "chrono",
+ "common",
+ "config_manager",
+ "data_models",
+ "deploy_service",
+ "port_manager",
+ "redis",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "schemars"

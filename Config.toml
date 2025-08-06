@@ -8,9 +8,12 @@ default_ttl_secs = 1800
 url = "postgres://ctf:password@localhost:5432/ctf_deploy"
 
 [redis]
-url = "redis://localhost:6379/0"
+url = "redis://localhost:6379/1"
 
 [captcha]
 provider = "recaptcha"
 site_key = "YOUR_SITE_KEY"
 secret_key = "YOUR_SECRET_KEY"
+
+[scheduler]
+poll_interval_secs = 10

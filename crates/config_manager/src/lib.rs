@@ -18,6 +18,7 @@ pub struct Config {
     pub database: Database,
     pub redis: Redis,
     pub captcha: Captcha,
+    pub scheduler: Scheduler,
 }
 
 #[derive(Debug, Deserialize)]
@@ -26,6 +27,11 @@ pub struct Ports {
     pub max: u16,
     pub default: u16,
     pub default_ttl_secs: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Scheduler {
+    pub poll_interval_secs: u64,
 }
 
 #[derive(Debug, Deserialize)]

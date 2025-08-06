@@ -1,4 +1,3 @@
-// src/error.rs
 use thiserror::Error;
 use bollard::errors::Error as BollardError;
 use common::ServiceError;

@@ -1,5 +1,3 @@
-// crates/data_models/tests/integration.rs
-
 use data_models::Db;
 use common::{TaskInstance, InstanceStatus};
 use chrono::Utc;

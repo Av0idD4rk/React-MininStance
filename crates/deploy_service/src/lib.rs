@@ -1,6 +1,5 @@
-// src/lib.rs
 mod docker;
-mod error;
+pub mod error;
 
 use crate::error::DeployError;
 use chrono::Utc;
@@ -26,7 +25,6 @@ impl Deployer {
     }
 
     pub async fn deploy(&mut self, task_name: &str) -> Result<TaskInstance, DeployError> {
-        // 1. Reserve a port
         let port = self.ports.reserve_port(None).await?;
 
         let tag = format!("ctf-{}-{}", task_name, Uuid::new_v4());
