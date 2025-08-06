@@ -25,7 +25,7 @@ RUN cargo build --release --bin scheduler_service
 
 # Stage 2: runtime
 FROM debian:bookworm-slim
-COPY --from=builder /app/crates/scheduler_service/target/release/scheduler_service /usr/local/bin/scheduler_service
+COPY --from=builder /app/target/release/scheduler_service /usr/local/bin/scheduler_service
 
 COPY Config.toml /app/Config.toml
 COPY tasks      /app/tasks
