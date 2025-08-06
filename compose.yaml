@@ -34,6 +34,7 @@ services:
       - "8080:8080"
     volumes:
       - ./:/app
+      - /var/run/docker.sock:/var/run/docker.sock
 
 
   scheduler:
@@ -51,6 +52,7 @@ services:
       DATABASE_URL: "postgres://ctf:ctf_pass@postgres/ctf_deploy"
     volumes:
       - ./:/app
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   db_data:
