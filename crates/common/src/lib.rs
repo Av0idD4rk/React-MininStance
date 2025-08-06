@@ -4,20 +4,32 @@ use thiserror::Error;
 use tracing::{subscriber::set_global_default, Level};
 use tracing_subscriber::FmtSubscriber;
 
+use config_manager::ConfigError;
+use port_manager::PortError;
+use redis::RedisError;
+use r2d2::Error as R2d2Error;
+
 #[derive(Debug, Error)]
 pub enum ServiceError {
     #[error("database error: {0}")]
     Db(#[from] diesel::result::Error),
+
     #[error("redis error: {0}")]
-    Redis(#[from] redis::RedisError),
+    Redis(#[from] RedisError),
+
     #[error("port error: {0}")]
-    Port(#[from] port_manager::PortError),
+    Port(#[from] PortError),
+
     #[error("config error: {0}")]
-    Config(#[from] config_manager::ConfigError),
+    Config(#[from] ConfigError),
+
     #[error("other: {0}")]
     Other(String),
+    #[error("pool error: {0}")]
+    Pool(#[from] R2d2Error),
 }
 
+/// Represents a running task instance
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TaskInstance {
     pub id: i32,
@@ -29,7 +41,7 @@ pub struct TaskInstance {
     pub status: InstanceStatus,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum InstanceStatus {
     Running,
     Stopped,
@@ -62,5 +74,15 @@ pub fn ttl_secs_until(expiry: DateTime<Utc>) -> u64 {
         (expiry - now).num_seconds() as u64
     } else {
         0
+    }
+}
+
+impl InstanceStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            InstanceStatus::Running => "Running",
+            InstanceStatus::Stopped => "Stopped",
+            InstanceStatus::Expired => "Expired",
+        }
     }
 }

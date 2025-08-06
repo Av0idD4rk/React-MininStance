@@ -4,3 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+diesel = { version = "2.2.12", features = ["postgres","r2d2","chrono"] }
+
+diesel_migrations = "2.2.0"
+chrono = { version = "0.4.41", features = ["serde"] }
+common = { path = "../common" }
+config_manager = { path = "../config_manager" }
