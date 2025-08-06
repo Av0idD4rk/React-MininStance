@@ -1,3 +1,5 @@
+networks:
+  data: {}
 services:
   postgres:
     image: postgres:17
@@ -7,28 +9,28 @@ services:
       POSTGRES_DB: ctf_deploy
     volumes:
       - db_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ctf -d ctf_deploy"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+    networks:
+      - data
 
   redis:
     image: redis:latest
     command: ["redis-server", "--save", ""]
     volumes:
       - redis_data:/data
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 5s
+    networks:
+      - data
 
   api_gateway:
     build:
@@ -43,10 +45,12 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      REDIS_URL: "redis://redis:6379"
+      REDIS_URL: "redis://redis:6379/0"
       DATABASE_URL: "postgres://ctf:ctf_pass@postgres/ctf_deploy"
     ports:
       - "8080:8080"
+    networks:
+      - data
     volumes:
       - ./:/app
       - /var/run/docker.sock:/var/run/docker.sock
@@ -65,8 +69,10 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      REDIS_URL: "redis://redis:6379"
+      REDIS_URL: "redis://redis:6379/0"
       DATABASE_URL: "postgres://ctf:ctf_pass@postgres/ctf_deploy"
+    networks:
+      - data
     volumes:
       - ./:/app
       - /var/run/docker.sock:/var/run/docker.sock
