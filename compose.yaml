@@ -38,8 +38,10 @@ services:
     image: ctf-api-gateway
     container_name: ctf-api-gateway
     depends_on:
-      - redis
-      - postgres
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
     environment:
       REDIS_URL: "redis://redis:6379"
       DATABASE_URL: "postgres://ctf:ctf_pass@postgres/ctf_deploy"
@@ -58,8 +60,10 @@ services:
     image: ctf-scheduler
     container_name: ctf-scheduler
     depends_on:
-      - redis
-      - postgres
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
     environment:
       REDIS_URL: "redis://redis:6379"
       DATABASE_URL: "postgres://ctf:ctf_pass@postgres/ctf_deploy"
