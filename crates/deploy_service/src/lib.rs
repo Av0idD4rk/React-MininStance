@@ -97,7 +97,7 @@ impl Deployer {
                     );
                 }
                 let hc = HostConfig {
-                    network_mode: Some("ctf-net".into()),
+                    network_mode: Some("data".into()),
                     annotations: Some(labels.clone()),
                     ..Default::default()
                 };
