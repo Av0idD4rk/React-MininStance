@@ -30,7 +30,7 @@ RUN cargo build --release --bin api_gateway
 
 # Stage 2: runtime
 FROM debian:bookworm-slim
-COPY --from=builder /app/crates/api_gateway/target/release/api_gateway /usr/local/bin/api_gateway
+COPY --from=builder /app/target/release/api_gateway /usr/local/bin/api_gateway
 
 # Copy shared config and tasks
 COPY Config.toml /app/Config.toml
