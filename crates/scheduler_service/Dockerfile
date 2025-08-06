@@ -1,12 +1,9 @@
 # Stage 1: build
 FROM rust:1.85-slim-bullseye AS builder
 
-RUN printf 'Acquire::Check-Valid-Until "false";\nAcquire::Check-Date "false";\n' \
-    > /etc/apt/apt.conf.d/99no-check
-
- # Now update and install build deps
- RUN apt-get update && apt-get install -y libssl-dev pkg-config git libpq-dev \
-   && rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+  && apt-get install -y libpq5 \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
