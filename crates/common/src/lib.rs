@@ -39,6 +39,7 @@ pub struct TaskInstance {
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub status: InstanceStatus,
+    pub user_id: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
@@ -54,6 +55,13 @@ pub struct UserSession {
     pub user_id: i32,
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct User {
+    pub id: i32,
+    pub username: String,
+    pub created_at: DateTime<Utc>,
 }
 
 pub fn init_logging() {

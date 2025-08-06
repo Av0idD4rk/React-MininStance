@@ -23,6 +23,7 @@ pub struct Config {
     pub redis: Redis,
     pub captcha: Captcha,
     pub scheduler: Scheduler,
+    pub sessions: Sessions,
 }
 
 #[derive(Debug, Deserialize)]
@@ -48,6 +49,13 @@ pub struct Database {
 pub struct Redis {
     pub url: String,
 }
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct Sessions {
+    pub ttl_hours: i64,
+    pub max_instances: u16,
+}
+
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Captcha {

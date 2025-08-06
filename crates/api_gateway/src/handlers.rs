@@ -1,16 +1,15 @@
-use actix_web::{web, HttpResponse, Responder, ResponseError};
+use actix_web::{HttpResponse, Responder, ResponseError, web};
+use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
+use actix_web::http::StatusCode;
 use thiserror::Error;
+use uuid::Uuid;
 
-use auth_captcha::CaptchaVerifier;
-use common::ServiceError;
+use crate::auth::AuthUser;
 use config_manager::get_config;
 use data_models::Db;
 use deploy_service::Deployer;
-use common::TaskInstance;
-
-// ----- Error type for the API -----
 
 #[derive(Debug, Error)]
 pub enum ApiError {
@@ -38,7 +37,16 @@ impl ResponseError for ApiError {
     }
 }
 
-// ----- Request/Response DTOs -----
+impl ApiError {
+    fn forbidden(msg: &str) -> actix_web::Error {
+        actix_web::error::InternalError::new(
+            msg.to_string(),
+            StatusCode::FORBIDDEN,
+        )
+            .into()
+    }
+}
+
 
 #[derive(Deserialize)]
 pub struct DeployReq {
@@ -60,77 +68,94 @@ pub struct InstanceListItem {
     status: String,
 }
 
-// ----- Handlers -----
-
-/// POST /deploy
 pub async fn deploy(
+    auth: AuthUser,
     body: web::Json<DeployReq>,
     deployer: web::Data<Mutex<Deployer>>,
 ) -> Result<impl Responder, ApiError> {
-    // 1. Verify captcha
-  /*  let verifier = CaptchaVerifier::new();
-    verifier
-        .verify(&body.captcha_token)
-        .await
-        .map_err(|_| ApiError::Captcha)?;*/
+    let cfg = get_config();
+    let user_id = auth.0.id;
+    let db = Db::new()?;
+    let running = db.count_running_instances_for_user(user_id)?;
+    if running >= cfg.sessions.clone().max_instances.into() {
+        return Err(ApiError::BadRequest("instance limit reached".into()));
+    }
 
-    // 2. Deploy
     let mut d = deployer.lock().unwrap();
     let inst = d.deploy(&body.task).await?;
 
-    // 3. Return the full TaskInstance
-    Ok(HttpResponse::Ok().json(inst))
+    let saved = db.create_instance_for_user(&inst, user_id)?;
+    Ok(HttpResponse::Ok().json(saved))
 }
 
-/// POST /stop
 pub async fn stop(
+    auth: AuthUser,
     body: web::Json<ActionReq>,
     deployer: web::Data<Mutex<Deployer>>,
-) -> Result<impl Responder, ApiError> {
-    // Lookup in DB to get container_id + port
-    let db = Db::new()?;
+) -> Result<impl Responder, actix_web::Error> {
+    let db = Db::new().map_err(ApiError::Db)?;
     let inst = db
-        .find_instance_by_id(body.instance_id)?
-        .ok_or_else(|| ApiError::BadRequest("instance not found".into()))?;
+        .find_instance_by_id(body.instance_id)
+        .map_err(ApiError::Db)?
+        .ok_or_else(|| ApiError::BadRequest("Instance not found".into()))?;
 
-    // Stop
+    if inst.user_id != auth.0.id {
+        return Err(ApiError::forbidden("Not your instance"));
+    }
+
     let mut d = deployer.lock().unwrap();
-    d.stop(&inst).await?;
-    Ok(HttpResponse::Ok().finish())
+    d.stop(&inst).await.map_err(ApiError::Deploy)?;
+    Ok(HttpResponse::NoContent().finish())
 }
 
-/// POST /restart
 pub async fn restart(
+    auth: AuthUser,
     body: web::Json<ActionReq>,
     deployer: web::Data<Mutex<Deployer>>,
-) -> Result<impl Responder, ApiError> {
-    let db = Db::new()?;
+) -> Result<impl Responder, actix_web::Error> {
+    let db = Db::new().map_err(ApiError::Db)?;
     let inst = db
-        .find_instance_by_id(body.instance_id)?
-        .ok_or_else(|| ApiError::BadRequest("instance not found".into()))?;
+        .find_instance_by_id(body.instance_id)
+        .map_err(ApiError::Db)?
+        .ok_or_else(|| ApiError::BadRequest("Instance not found".into()))?;
+
+    if inst.user_id != auth.0.id {
+        return Err(ApiError::forbidden("Not your instance"));
+    }
+
     let mut d = deployer.lock().unwrap();
-    d.restart(&inst).await?;
-    Ok(HttpResponse::Ok().finish())
+    d.restart(&inst).await.map_err(ApiError::Deploy)?;
+    Ok(HttpResponse::NoContent().finish())
 }
 
-/// POST /extend
 pub async fn extend(
+    auth: AuthUser,
     body: web::Json<ActionReq>,
     deployer: web::Data<Mutex<Deployer>>,
-) -> Result<impl Responder, ApiError> {
-    let cfg = get_config();
-    let db = Db::new()?;
+) -> Result<impl Responder, actix_web::Error> {
+    let db = Db::new().map_err(ApiError::Db)?;
     let inst = db
-        .find_instance_by_id(body.instance_id)?
-        .ok_or_else(|| ApiError::BadRequest("instance not found".into()))?;
+        .find_instance_by_id(body.instance_id)
+        .map_err(ApiError::Db)?
+        .ok_or_else(|| ApiError::BadRequest("Instance not found".into()))?;
+
+    if inst.user_id != auth.0.id {
+        return Err(ApiError::forbidden("Not your instance"));
+    }
+
     let mut d = deployer.lock().unwrap();
-    d.extend(&inst, cfg.ports.extend_time_secs).await?;
-    Ok(HttpResponse::Ok().finish())
+    let ttl = get_config().ports.default_ttl_secs;
+    d.extend(&inst, ttl).await.map_err(ApiError::Deploy)?;
+    Ok(HttpResponse::NoContent().finish())
 }
 
-pub async fn list_instances() -> Result<impl Responder, ApiError> {
-    let db = Db::new()?;
-    let rows = db.list_instances()?;
+pub async fn list_instances(
+    auth: AuthUser,
+) -> Result<impl Responder, actix_web::Error> {
+    let db = Db::new().map_err(ApiError::Db)?;
+    let rows = db
+        .list_instances_for_user(auth.0.id)
+        .map_err(ApiError::Db)?;
     let now = chrono::Utc::now();
     let items: Vec<InstanceListItem> = rows
         .into_iter()
@@ -138,18 +163,64 @@ pub async fn list_instances() -> Result<impl Responder, ApiError> {
             id: i.id,
             task_name: i.task_name,
             port: i.port,
-            expires_in_secs: i.expires_at.signed_duration_since(now).num_seconds().max(0) as u64,
+            expires_in_secs: i.expires_at
+                .signed_duration_since(now)
+                .num_seconds()
+                .max(0) as u64,
             status: format!("{:?}", i.status),
         })
         .collect();
     Ok(HttpResponse::Ok().json(items))
 }
 
+#[derive(Deserialize)]
+struct TokenReq {
+    username: String,
+}
+
+#[derive(Serialize)]
+struct TokenResp {
+    token: String,
+    expires_at: i64,
+}
+
+pub async fn token(
+    body: web::Json<TokenReq>,
+) -> Result<impl Responder, ApiError> {
+    let db = Db::new()?;
+
+    let user = db.find_or_create_user(&body.username)?;
+
+    if let Some(existing_token) = db.find_valid_session_for_user(user.id)? {
+        if let Some(sess) = db.get_session(&existing_token)? {
+            return Ok(HttpResponse::Ok().json(TokenResp {
+                token: existing_token,
+                expires_at: sess.expires_at.timestamp(),
+            }));
+     }
+    }
+
+
+    let cfg = get_config();
+    let ttl_hours= cfg
+    .sessions.clone().ttl_hours;
+    let expires = Utc::now() + Duration::hours(ttl_hours.into());
+
+    let new_token = Uuid::new_v4().to_string();
+    db.create_session( & new_token, user.id, expires) ?;
+
+    Ok(HttpResponse::Ok().json(TokenResp {
+    token: new_token,
+    expires_at: expires.timestamp(),
+    }))
+}
+
 
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
-    cfg.route("/deploy", web::post().to(deploy))
-        .route("/stop",   web::post().to(stop))
-        .route("/restart",web::post().to(restart))
+    cfg.route("/token", web::post().to(token))
+        .route("/deploy", web::post().to(deploy))
+        .route("/stop", web::post().to(stop))
+        .route("/restart", web::post().to(restart))
         .route("/extend", web::post().to(extend))
         .route("/instances", web::get().to(list_instances));
 }

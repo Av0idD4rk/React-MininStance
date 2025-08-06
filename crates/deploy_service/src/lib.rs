@@ -33,7 +33,7 @@ impl Deployer {
         let cfg = get_config();
         let internal = cfg.ports.default.to_string();
         let container_id = self.docker.start_container(&tag, port, &internal).await?;
-        let expires_at = compute_expiry(get_config().ports.default_ttl_secs);
+        let expires_at = compute_expiry(cfg.ports.default_ttl_secs);
         let inst = TaskInstance {
             id: 0,
             task_name: task_name.to_string(),
@@ -42,9 +42,9 @@ impl Deployer {
             created_at: Utc::now(),
             expires_at,
             status: InstanceStatus::Running,
+            user_id: 0,
         };
-        let saved = self.db.create_instance(&inst)?;
-        Ok(saved)
+        Ok(inst)
     }
 
     pub async fn stop(&mut self, inst: &TaskInstance) -> Result<(), DeployError> {

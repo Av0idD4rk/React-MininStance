@@ -19,3 +19,7 @@ verify_url = "https://www.google.com/recaptcha/api/siteverify"
 
 [scheduler]
 poll_interval_secs = 10
+
+[sessions]
+ttl_hours = 24
+max_instances = 5
