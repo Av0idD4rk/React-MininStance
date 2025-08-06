@@ -1,7 +1,7 @@
 # Stage 1: build
 FROM rust:1.85-slim-bullseye AS builder
 
-RUN apt-get update && apt-get install -y libssl-dev pkg-config git libpq5 \
+RUN apt-get update && apt-get install -y libssl-dev pkg-config git libpq-dev \
    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -26,6 +26,10 @@ RUN cargo build --release --bin api_gateway
 
 # Stage 2: runtime
 FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y libssl-dev pkg-config git libpq-dev \
+   && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /app/target/release/api_gateway /usr/local/bin/api_gateway
 
 # Copy shared config and tasks
