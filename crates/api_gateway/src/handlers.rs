@@ -232,5 +232,29 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
         .route("/stop", web::post().to(stop))
         .route("/restart", web::post().to(restart))
         .route("/extend", web::post().to(extend))
-        .route("/instances", web::get().to(list_instances));
+        .route("/instances", web::get().to(list_instances))
+        .route("/tasks", web::get().to(list_tasks));
+}
+
+
+#[derive(Serialize)]
+pub struct TaskInfo {
+    pub name: String,
+    pub protocol: String,
+    pub container_port: u16,
+}
+
+
+pub async fn list_tasks() -> Result<impl Responder, ApiError> {
+    let cfg = get_config();
+    let tasks = cfg
+        .tasks
+        .iter()
+        .map(|(name, tc)| TaskInfo {
+            name: name.clone(),
+            protocol: tc.protocol.clone(),
+            container_port: tc.container_port,
+        })
+        .collect::<Vec<_>>();
+    Ok(HttpResponse::Ok().json(tasks))
 }
