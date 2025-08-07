@@ -6,11 +6,15 @@ services:
   traefik:
     image: traefik:latest
     command:
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--providers.docker.network=ctf-net"
       - "--entryPoints.web.address=:80"
       - "--entryPoints.tcp.address=:9000"
+      - "--entryPoints.traefik.address=:8081"
+      - "--log.level=INFO"
     ports:
       - "80:80"
       - "9000:9000"
