@@ -109,7 +109,6 @@ impl Deployer {
                 }
                 let hc = HostConfig {
                     network_mode: Some("ctf-net".into()),
-                    annotations: Some(labels.clone()),
                     ..Default::default()
                 };
                 let opts = CreateContainerOptions {
@@ -118,6 +117,7 @@ impl Deployer {
                 };
                 let cfg = bollard::models::ContainerCreateBody {
                     image: Some(tag.clone()),
+                    labels: Some(labels.clone()),
                     host_config: Some(hc),
                     ..Default::default()
                 };
