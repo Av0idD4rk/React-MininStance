@@ -1,6 +1,5 @@
 mod handlers;
 mod auth;
-mod routing;
 
 use actix_web::{App, HttpServer};
 use common::init_logging;
@@ -21,7 +20,7 @@ async fn main() -> std::io::Result<()> {
     let deployer = Deployer::new().await.expect("failed to init deployer");
     let deployer_data = actix_web::web::Data::new(Mutex::new(deployer));
     let db = Db::new().expect("DB init failed");
-    // Seed all known tasks from disk
+
     for entry in std::fs::read_dir("./tasks")? {
         let name = entry?.file_name().into_string().unwrap();
         let path = format!("./tasks/{}/Dockerfile", name);

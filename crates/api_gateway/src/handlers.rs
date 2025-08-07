@@ -5,7 +5,6 @@ use chrono::{Duration, Utc};
 use common::TaskInstance;
 use config_manager::get_config;
 use data_models::Db;
-use data_models::schema::instances::endpoint;
 use deploy_service::Deployer;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
@@ -59,7 +58,6 @@ pub struct ActionReq {
 pub struct InstanceListItem {
     id: i32,
     task_name: String,
-    port: u16,
     expires_in_secs: u64,
     endpoint: String,
     status: String,
@@ -163,7 +161,6 @@ pub async fn list_instances(auth: AuthUser) -> Result<impl Responder, actix_web:
         .map(|i| InstanceListItem {
             id: i.id,
             task_name: i.task_name,
-            port: i.port,
             expires_in_secs: i.expires_at.signed_duration_since(now).num_seconds().max(0) as u64,
             endpoint: i.endpoint,
             status: format!("{:?}", i.status),

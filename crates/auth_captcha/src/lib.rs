@@ -58,7 +58,7 @@ impl CaptchaVerifier {
 impl CaptchaVerifier {
     pub fn test_new(url: impl Into<String>, secret: impl Into<String>) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: Client::new(),
             url: url.into(),
             secret: secret.into(),
         }

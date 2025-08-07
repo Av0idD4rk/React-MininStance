@@ -2,6 +2,7 @@ networks:
   ctf-net:
     name: ctf-net
   data: {}
+
 services:
   traefik:
     image: traefik:latest
@@ -44,19 +45,6 @@ services:
       - ./userlist.txt:/etc/pgbouncer/userlist.txt:ro
     networks:
       - data
-  redis:
-    image: redis:latest
-    command: ["redis-server", "--save", ""]
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
-    networks:
-      - data
 
   api_gateway:
     build:
@@ -66,12 +54,9 @@ services:
     image: ctf-api-gateway
     container_name: ctf-api-gateway
     depends_on:
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
+      pgbouncer:
+        condition: service_started
     environment:
-      REDIS_URL: "redis://redis:6379/0"
       DATABASE_URL: "postgres://ctf:ctf_pass@pgbouncer:6432/ctf_deploy"
     ports:
       - "8080:8080"
@@ -91,12 +76,9 @@ services:
     image: ctf-scheduler
     container_name: ctf-scheduler
     depends_on:
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
+      pgbouncer:
+        condition: service_started
     environment:
-      REDIS_URL: "redis://redis:6379/0"
       DATABASE_URL: "postgres://ctf:ctf_pass@pgbouncer:6432/ctf_deploy"
     networks:
       - data
@@ -107,4 +89,3 @@ services:
 
 volumes:
   db_data:
-  redis_data:
