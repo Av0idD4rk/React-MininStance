@@ -6,6 +6,7 @@ use actix_web::{App, HttpServer};
 use common::init_logging;
 use config_manager::get_config;
 use std::sync::Mutex;
+use actix_cors::Cors;
 use data_models::Db;
 use deploy_service::Deployer;
 use handlers::configure_routes;
@@ -27,7 +28,14 @@ async fn main() -> std::io::Result<()> {
         db.ensure_task(&name, &path).expect("failed to seed task");
     }
     HttpServer::new(move || {
+        let cors = Cors::default()
+            .allow_any_origin()
+            .allow_any_method()
+            .allow_any_header()
+            .supports_credentials();
+
         App::new()
+            .wrap(cors)
             .app_data(deployer_data.clone())
             .configure(configure_routes)
     })
