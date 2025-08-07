@@ -95,7 +95,7 @@ impl Deployer {
                     );
                 } else {
                     labels.insert(
-                        format!("traefik.tcp.routers.{}.entryPoints", unique),
+                        format!("traefik.tcp.routers.{}.entrypoints", unique),
                         cfg.routing.tcp_entry.clone(),
                     );
                     labels.insert(
