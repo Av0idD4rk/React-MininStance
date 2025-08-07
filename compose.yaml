@@ -1,4 +1,6 @@
 networks:
+  ctf-net:
+    name: ctf-net
   data: {}
 services:
   traefik:
@@ -14,7 +16,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
-      - data
+      - ctf-net
   postgres:
     image: postgres:17
     environment:
@@ -65,6 +67,7 @@ services:
       - "8080:8080"
     networks:
       - data
+      - ctf-net
     volumes:
       - ./:/app
       - /var/run/docker.sock:/var/run/docker.sock
@@ -87,6 +90,7 @@ services:
       DATABASE_URL: "postgres://ctf:ctf_pass@postgres/ctf_deploy"
     networks:
       - data
+      - -ctf-net
     volumes:
       - ./:/app
       - /var/run/docker.sock:/var/run/docker.sock
