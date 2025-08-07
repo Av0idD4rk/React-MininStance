@@ -4,6 +4,7 @@ use serde::Deserialize;
 use std::fs;
 use thiserror::Error;
 use std::{env, path::PathBuf};
+use humantime::parse_duration;
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
@@ -45,6 +46,7 @@ pub struct Config {
     pub captcha: Captcha,
     pub scheduler: Scheduler,
     pub sessions: Sessions,
+    pub containers: ContainerConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -97,6 +99,35 @@ fn find_config_file() -> Result<PathBuf, ConfigError> {
         }
     }
     Err(ConfigError::NotFound)
+}
+#[derive(Deserialize)]
+pub struct ContainerConfig {
+    #[serde(deserialize_with = "parse_bytes")]
+    pub memory_limit:    i64,
+    #[serde(deserialize_with = "parse_bytes")]
+    pub swap_limit:      i64,
+    pub cpu_quota:       f64,        // cores
+    pub pids_limit:      u64,
+
+    pub enable_no_new_privileges: bool,
+    pub read_only_rootfs:         bool,
+    pub enable_tmpfs:             bool,
+    #[serde(deserialize_with = "parse_bytes")]
+    pub tmpfs_size:       i64,
+
+    pub drop_all_capabilities: bool,
+    #[serde(default)]
+    pub add_capabilities:   Vec<String>,
+}
+
+fn parse_bytes<'de, D>(deserializer: D) -> Result<i64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    let dur = parse_duration(&s)
+        .map_err(serde::de::Error::custom)?;
+    Ok(dur.as_secs() as i64)  // bytes interpreted as seconds numerically
 }
 
 /// Lazily load & parse the config once

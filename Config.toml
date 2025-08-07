@@ -1,3 +1,18 @@
+[containers]
+memory_limit   = "512M"
+swap_limit     = "512M"
+cpu_quota      = 0.5
+pids_limit     = 1000
+
+enable_no_new_privileges = true
+read_only_rootfs        = true
+enable_tmpfs            = true
+tmpfs_size              = "64M"
+
+drop_all_capabilities   = true
+add_capabilities        = ["CAP_NET_BIND_SERVICE"]
+
+
 [ports]
 min = 3000
 max = 4000

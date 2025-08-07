@@ -20,7 +20,7 @@ pub struct Deployer {
     db: Db,
 }
 pub struct DeployResult {
-    pub instance: TaskInstance
+    pub instance: TaskInstance,
 }
 impl Deployer {
     pub async fn new() -> Result<Self, DeployError> {
@@ -32,10 +32,7 @@ impl Deployer {
 
     pub async fn deploy(&mut self, task_name: &str) -> Result<DeployResult, DeployError> {
         let cfg = get_config();
-        let task_cfg = cfg
-            .tasks
-            .get(task_name)
-            .unwrap_or(&cfg.tasks["_default"]);
+        let task_cfg = cfg.tasks.get(task_name).unwrap_or(&cfg.tasks["_default"]);
 
         // 1. Reserve a host port (only used in "port" mode)
         let port = self
@@ -69,7 +66,10 @@ impl Deployer {
                     m
                 });
 
-                let opts = CreateContainerOptions { name: Some(tag.clone()), platform: "".to_string()};
+                let opts = CreateContainerOptions {
+                    name: Some(tag.clone()),
+                    platform: "".to_string(),
+                };
                 let body = ContainerCreateBody {
                     image: Some(tag.clone()),
                     host_config: Some(hc),
@@ -82,10 +82,7 @@ impl Deployer {
                 // no published ports, just labels + custom network
                 let mut labels = HashMap::new();
                 labels.insert("traefik.enable".into(), "true".into());
-                labels.insert(
-                    format!("traefik.docker.network"),
-                    "ctf-net".into(),
-                );
+                labels.insert(format!("traefik.docker.network"), "ctf-net".into());
 
                 if task_cfg.protocol == "http" {
                     // HTTP router
@@ -116,12 +113,50 @@ impl Deployer {
                         task_cfg.container_port.to_string(),
                     );
                 }
+                let cont_cfg = &get_config().containers;
 
-                let hc = HostConfig {
-                    network_mode: Some("ctf-net".into()),
+                let cpu_period = 100_000;
+                let cpu_quota = (cont_cfg.cpu_quota * cpu_period as f64) as i64;
+
+                let mut hc = HostConfig {
+                    memory: Some(cont_cfg.memory_limit),
+                    memory_swap: Some(cont_cfg.swap_limit),
+                    cpu_period: Some(cpu_period),
+                    cpu_quota: Some(cpu_quota),
+                    pids_limit: Some(cont_cfg.pids_limit as i64),
+
+                    readonly_rootfs: Some(cont_cfg.read_only_rootfs),
+                    cap_drop: if cont_cfg.drop_all_capabilities {
+                        Some(vec!["ALL".into()])
+                    } else {
+                        None
+                    },
+                    cap_add: if cont_cfg.add_capabilities.is_empty() {
+                        None
+                    } else {
+                        Some(cont_cfg.add_capabilities.clone())
+                    },
+                    security_opt: Some(vec![if cont_cfg.enable_no_new_privileges {
+                        "no-new-privileges".to_string()
+                    } else {
+                        "no-new-privileges=false".to_string()
+                    }]),
+                    tmpfs: if cont_cfg.enable_tmpfs {
+                        let mut m = HashMap::new();
+                        m.insert(
+                            "/tmp".to_string(),
+                            format!("rw,size={}", cont_cfg.tmpfs_size),
+                        );
+                        Some(m)
+                    } else {
+                        None
+                    },
                     ..Default::default()
                 };
-                let opts = CreateContainerOptions { name: Some(tag.clone()), platform: "".to_string() };
+                let opts = CreateContainerOptions {
+                    name: Some(tag.clone()),
+                    platform: "".to_string(),
+                };
                 let body = ContainerCreateBody {
                     image: Some(tag.clone()),
                     labels: Some(labels),
