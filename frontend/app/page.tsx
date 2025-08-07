@@ -37,7 +37,9 @@ export default function HomePage() {
         setInstances(list);
         console.log(list)
     }
-
+    function handleDeploy(inst: Instance, endpoint: string) {
+        reloadInstances();
+    }
     async function handleAction(action: "stop"|"restart"|"extend", id: number) {
         await authFetch(`${API_URL}/${action}`, token!, {
             method: "POST",
@@ -79,6 +81,7 @@ export default function HomePage() {
                     token={token!}
                     onClose={() => setSelected(null)}
                     onAction={handleAction}
+                    onDeploy={handleDeploy}
                 />
             )}
         </>

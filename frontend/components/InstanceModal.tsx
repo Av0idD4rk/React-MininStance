@@ -12,6 +12,7 @@ export interface InstanceModalProps {
     taskName: string;
     token: string;
     onClose: () => void;
+    onDeploy: (inst: Instance, endpoint: string) => void;
     onAction: (
         action: "stop" | "restart" | "extend",
         instanceId: number
@@ -19,7 +20,7 @@ export interface InstanceModalProps {
 }
 
 const InstanceModal: FC<InstanceModalProps> = ({
-                                                   taskName, token, onClose, onAction
+                                                   taskName, token, onDeploy, onClose, onAction
                                                }) => {
     const [busy, setBusy] = useState(false);
     const [inst, setInst] = useState<Instance | null>(null);
@@ -40,6 +41,7 @@ const InstanceModal: FC<InstanceModalProps> = ({
         setSecondsLeft(data.instance.expires_in_secs);
         setInst(data.instance);
         setEndpoint(data.instance.endpoint);
+        onDeploy(data.instance, data.instance.endpoint);
         setBusy(false);
     }
 
