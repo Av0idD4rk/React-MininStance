@@ -229,14 +229,16 @@ pub struct TaskInfo {
 
 pub async fn list_tasks() -> Result<impl Responder, ApiError> {
     let cfg = get_config();
-    let tasks = cfg
+    let tasks: Vec<TaskInfo> = cfg
         .tasks
         .iter()
+        .filter(|(name, _)| name.as_str() != "_default")
         .map(|(name, tc)| TaskInfo {
             name: name.clone(),
             protocol: tc.protocol.clone(),
             container_port: tc.container_port,
         })
-        .collect::<Vec<_>>();
+        .collect();
     Ok(HttpResponse::Ok().json(tasks))
 }
+
