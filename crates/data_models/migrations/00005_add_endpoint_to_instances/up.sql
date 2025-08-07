@@ -1,0 +1,2 @@
+ALTER TABLE instances
+    ADD COLUMN endpoint TEXT NOT NULL DEFAULT '';

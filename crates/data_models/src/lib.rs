@@ -48,6 +48,7 @@ impl Db {
             port: inst.port as i32,
             expires_at: inst.expires_at,
             status: inst.status.as_str().to_string(),
+            endpoint: inst.endpoint.clone(),
             user_id: inst.user_id,
         };
 
@@ -109,6 +110,7 @@ impl Db {
             port: inst.port as i32,
             expires_at: inst.expires_at,
             status: inst.status.as_str().to_string(),
+            endpoint: inst.endpoint.clone(),
             user_id: uid,
         };
 
@@ -181,6 +183,7 @@ impl Db {
         let mut conn = self.get_conn()?;
         let rows = instances
             .filter(user_id.eq(uid))
+            .filter(status.eq("Running"))
             .load::<RowInstance>(&mut conn)?;
         Ok(rows.into_iter().map(Into::into).collect())
     }
@@ -277,6 +280,7 @@ pub mod schema {
             created_at -> Timestamptz,
             expires_at -> Timestamptz,
             status -> Text,
+            endpoint -> Text,
             user_id -> Int4,
         }
     }
@@ -329,6 +333,7 @@ struct RowInstance {
     created_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
     status: String,
+    endpoint: String,
     user_id: i32,
 }
 
@@ -340,6 +345,7 @@ struct NewInstance {
     port: i32,
     expires_at: DateTime<Utc>,
     status: String,
+    endpoint: String,
     user_id: i32,
 }
 
@@ -352,6 +358,7 @@ impl From<(&TaskInstance, i32)> for NewInstance {
             expires_at: t.expires_at,
             status: t.status.as_str().to_string(),
             user_id: uid,
+            endpoint: t.endpoint.clone(),
         }
     }
 }
@@ -371,6 +378,7 @@ impl From<RowInstance> for TaskInstance {
                 "Stopped" => InstanceStatus::Stopped,
                 _ => InstanceStatus::Expired,
             },
+            endpoint: r.endpoint,
             user_id: r.user_id,
         }
     }

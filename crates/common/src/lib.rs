@@ -40,6 +40,7 @@ pub struct TaskInstance {
     pub expires_at: DateTime<Utc>,
     pub status: InstanceStatus,
     pub user_id: i32,
+    pub endpoint: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]

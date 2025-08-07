@@ -1,6 +1,23 @@
 networks:
+  ctf-net:
+    name: ctf-net
   data: {}
 services:
+  traefik:
+    image: traefik:latest
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=ctf-net"
+      - "--entryPoints.web.address=:80"
+      - "--entryPoints.tcp.address=:9000"
+    ports:
+      - "80:80"
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - ctf-net
   postgres:
     image: postgres:17
     environment:
@@ -17,7 +34,16 @@ services:
       start_period: 10s
     networks:
       - data
-
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    networks:
+      - data
   redis:
     image: redis:latest
     command: ["redis-server", "--save", ""]
@@ -46,11 +72,12 @@ services:
         condition: service_healthy
     environment:
       REDIS_URL: "redis://redis:6379/0"
-      DATABASE_URL: "postgres://ctf:ctf_pass@postgres/ctf_deploy"
+      DATABASE_URL: "postgres://ctf:ctf_pass@pgbouncer:6432/ctf_deploy"
     ports:
       - "8080:8080"
     networks:
       - data
+      - ctf-net
     volumes:
       - ./:/app
       - /var/run/docker.sock:/var/run/docker.sock
@@ -70,9 +97,10 @@ services:
         condition: service_healthy
     environment:
       REDIS_URL: "redis://redis:6379/0"
-      DATABASE_URL: "postgres://ctf:ctf_pass@postgres/ctf_deploy"
+      DATABASE_URL: "postgres://ctf:ctf_pass@pgbouncer:6432/ctf_deploy"
     networks:
       - data
+      - ctf-net
     volumes:
       - ./:/app
       - /var/run/docker.sock:/var/run/docker.sock

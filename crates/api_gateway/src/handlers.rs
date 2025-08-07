@@ -1,15 +1,16 @@
+use crate::auth::AuthUser;
+use actix_web::http::StatusCode;
 use actix_web::{HttpResponse, Responder, ResponseError, web};
 use chrono::{Duration, Utc};
-use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
-use actix_web::http::StatusCode;
-use thiserror::Error;
-use uuid::Uuid;
-
-use crate::auth::AuthUser;
+use common::TaskInstance;
 use config_manager::get_config;
 use data_models::Db;
+use data_models::schema::instances::endpoint;
 use deploy_service::Deployer;
+use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
+use thiserror::Error;
+use uuid::Uuid;
 
 #[derive(Debug, Error)]
 pub enum ApiError {
@@ -39,14 +40,9 @@ impl ResponseError for ApiError {
 
 impl ApiError {
     fn forbidden(msg: &str) -> actix_web::Error {
-        actix_web::error::InternalError::new(
-            msg.to_string(),
-            StatusCode::FORBIDDEN,
-        )
-            .into()
+        actix_web::error::InternalError::new(msg.to_string(), StatusCode::FORBIDDEN).into()
     }
 }
-
 
 #[derive(Deserialize)]
 pub struct DeployReq {
@@ -65,7 +61,13 @@ pub struct InstanceListItem {
     task_name: String,
     port: u16,
     expires_in_secs: u64,
+    endpoint: String,
     status: String,
+}
+
+#[derive(Serialize)]
+pub struct DeployResp {
+    pub instance: TaskInstance,
 }
 
 pub async fn deploy(
@@ -82,10 +84,11 @@ pub async fn deploy(
     }
 
     let mut d = deployer.lock().unwrap();
-    let inst = d.deploy(&body.task).await?;
+    let dr = d.deploy(&body.task).await?;
 
-    let saved = db.create_instance_for_user(&inst, user_id)?;
-    Ok(HttpResponse::Ok().json(saved))
+    // persist under user:
+    let saved = db.create_instance_for_user(&dr.instance, auth.0.id)?;
+    Ok(HttpResponse::Ok().json(DeployResp { instance: saved }))
 }
 
 pub async fn stop(
@@ -149,9 +152,7 @@ pub async fn extend(
     Ok(HttpResponse::NoContent().finish())
 }
 
-pub async fn list_instances(
-    auth: AuthUser,
-) -> Result<impl Responder, actix_web::Error> {
+pub async fn list_instances(auth: AuthUser) -> Result<impl Responder, actix_web::Error> {
     let db = Db::new().map_err(ApiError::Db)?;
     let rows = db
         .list_instances_for_user(auth.0.id)
@@ -163,10 +164,8 @@ pub async fn list_instances(
             id: i.id,
             task_name: i.task_name,
             port: i.port,
-            expires_in_secs: i.expires_at
-                .signed_duration_since(now)
-                .num_seconds()
-                .max(0) as u64,
+            expires_in_secs: i.expires_at.signed_duration_since(now).num_seconds().max(0) as u64,
+            endpoint: i.endpoint,
             status: format!("{:?}", i.status),
         })
         .collect();
@@ -184,9 +183,7 @@ struct TokenResp {
     expires_at: i64,
 }
 
-pub async fn token(
-    body: web::Json<TokenReq>,
-) -> Result<impl Responder, ApiError> {
+pub async fn token(body: web::Json<TokenReq>) -> Result<impl Responder, ApiError> {
     let db = Db::new()?;
 
     let user = db.find_or_create_user(&body.username)?;
@@ -197,24 +194,21 @@ pub async fn token(
                 token: existing_token,
                 expires_at: sess.expires_at.timestamp(),
             }));
-     }
+        }
     }
 
-
     let cfg = get_config();
-    let ttl_hours= cfg
-    .sessions.clone().ttl_hours;
+    let ttl_hours = cfg.sessions.clone().ttl_hours;
     let expires = Utc::now() + Duration::hours(ttl_hours.into());
 
     let new_token = Uuid::new_v4().to_string();
-    db.create_session( & new_token, user.id, expires) ?;
+    db.create_session(&new_token, user.id, expires)?;
 
     Ok(HttpResponse::Ok().json(TokenResp {
-    token: new_token,
-    expires_at: expires.timestamp(),
+        token: new_token,
+        expires_at: expires.timestamp(),
     }))
 }
-
 
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     cfg.route("/token", web::post().to(token))
@@ -222,5 +216,29 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
         .route("/stop", web::post().to(stop))
         .route("/restart", web::post().to(restart))
         .route("/extend", web::post().to(extend))
-        .route("/instances", web::get().to(list_instances));
+        .route("/instances", web::get().to(list_instances))
+        .route("/tasks", web::get().to(list_tasks));
 }
+
+#[derive(Serialize)]
+pub struct TaskInfo {
+    pub name: String,
+    pub protocol: String,
+    pub container_port: u16,
+}
+
+pub async fn list_tasks() -> Result<impl Responder, ApiError> {
+    let cfg = get_config();
+    let tasks: Vec<TaskInfo> = cfg
+        .tasks
+        .iter()
+        .filter(|(name, _)| name.as_str() != "_default")
+        .map(|(name, tc)| TaskInfo {
+            name: name.clone(),
+            protocol: tc.protocol.clone(),
+            container_port: tc.container_port,
+        })
+        .collect();
+    Ok(HttpResponse::Ok().json(tasks))
+}
+

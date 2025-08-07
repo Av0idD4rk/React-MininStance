@@ -4,6 +4,7 @@ use serde::Deserialize;
 use std::fs;
 use thiserror::Error;
 use std::{env, path::PathBuf};
+use humantime::parse_duration;
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
@@ -16,14 +17,36 @@ pub enum ConfigError {
 }
 
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
+pub struct RoutingConfig {
+    pub variant: String,           // "port" | "traefik"
+    pub domain: String,            // e.g. "localhost"
+    pub traefik_domain: String,    // e.g. "ctf.local"
+    pub http_entry: String,        // e.g. "web"
+    pub tcp_entry: String,         // e.g. "tcp"
+}
+
+#[derive(Deserialize)]
+pub struct TaskConfig {
+    #[serde(default="default_protocol")]
+    pub protocol: String,
+    #[serde(default="default_cport")]
+    pub container_port: u16,
+}
+fn default_protocol() -> String { "http".into() }
+fn default_cport()   -> u16    { 3000 }
+
+#[derive(Deserialize)]
 pub struct Config {
+    pub routing: RoutingConfig,
+    pub tasks: std::collections::HashMap<String, TaskConfig>,
     pub ports: Ports,
     pub database: Database,
     pub redis: Redis,
     pub captcha: Captcha,
     pub scheduler: Scheduler,
     pub sessions: Sessions,
+    pub containers: ContainerConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -56,7 +79,6 @@ pub struct Sessions {
     pub max_instances: u16,
 }
 
-
 #[derive(Clone, Debug, Deserialize)]
 pub struct Captcha {
     pub provider: String,
@@ -64,6 +86,7 @@ pub struct Captcha {
     pub secret_key: String,
     pub verify_url: String,
 }
+
 fn find_config_file() -> Result<PathBuf, ConfigError> {
     let mut dir = env::current_dir()?;
     loop {
@@ -76,6 +99,35 @@ fn find_config_file() -> Result<PathBuf, ConfigError> {
         }
     }
     Err(ConfigError::NotFound)
+}
+#[derive(Deserialize)]
+pub struct ContainerConfig {
+    #[serde(deserialize_with = "parse_bytes")]
+    pub memory_limit:    i64,
+    #[serde(deserialize_with = "parse_bytes")]
+    pub swap_limit:      i64,
+    pub cpu_quota:       f64,        // cores
+    pub pids_limit:      u64,
+
+    pub enable_no_new_privileges: bool,
+    pub read_only_rootfs:         bool,
+    pub enable_tmpfs:             bool,
+    #[serde(deserialize_with = "parse_bytes")]
+    pub tmpfs_size:       i64,
+
+    pub drop_all_capabilities: bool,
+    #[serde(default)]
+    pub add_capabilities:   Vec<String>,
+}
+
+fn parse_bytes<'de, D>(deserializer: D) -> Result<i64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    let dur = parse_duration(&s)
+        .map_err(serde::de::Error::custom)?;
+    Ok(dur.as_secs() as i64)  // bytes interpreted as seconds numerically
 }
 
 /// Lazily load & parse the config once
