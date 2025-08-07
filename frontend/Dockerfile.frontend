@@ -1,0 +1,25 @@
+# Stage 1: install & build
+FROM node:23-alpine AS builder
+WORKDIR /app
+
+# Copy package manifests and lockfile
+COPY package.json package-lock.json ./
+# Install deps
+RUN npm ci
+
+# Copy source & build
+COPY . .
+RUN npm run build
+
+# Stage 2: production image
+FROM node:23-alpine AS production
+WORKDIR /app
+
+# Only copy what's needed
+COPY --from=builder /app/package.json /app/package-lock.json ./
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+RUN npm ci --omit=dev
+
+EXPOSE 3000
+CMD ["npm", "start"]
