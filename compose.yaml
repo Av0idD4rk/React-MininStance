@@ -24,7 +24,6 @@ services:
       POSTGRES_USER: ctf
       POSTGRES_PASSWORD: password
       POSTGRES_DB: ctf_deploy
-      POSTGRES_PASSWORD_ENCRYPTION: md5
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
