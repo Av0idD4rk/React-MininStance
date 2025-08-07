@@ -6,13 +6,13 @@ default_ttl_secs = 1800
 extend_time_secs = 600
 
 [database]
-url = "postgres://ctf:password@postgres:5432/ctf_deploy"
+url = "postgres://ctf:password@pgbouncer:6432/ctf_deploy"
 
 [redis]
 url = "redis://redis:6379/0"
 
 [captcha]
-provider = "recaptcha"
+provider = "recaptcha" # not fully implemented
 site_key   = "YOUR_SITE_KEY"
 secret_key = "YOUR_SECRET_KEY"
 verify_url = "https://www.google.com/recaptcha/api/siteverify"
