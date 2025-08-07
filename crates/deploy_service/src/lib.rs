@@ -2,17 +2,17 @@ mod docker;
 pub mod error;
 
 use crate::error::DeployError;
+use bollard::models::{HostConfig, PortBinding};
+use bollard::query_parameters::CreateContainerOptions;
+use bollard::query_parameters::StartContainerOptions;
 use chrono::Utc;
 use common::{InstanceStatus, TaskInstance, compute_expiry};
 use config_manager::get_config;
 use data_models::Db;
 use docker::DockerClient;
 use port_manager::PortManager;
-use uuid::Uuid;
-use bollard::query_parameters::CreateContainerOptions;
-use bollard::models::{HostConfig, PortBinding};
 use std::collections::HashMap;
-use bollard::query_parameters::StartContainerOptions;
+use uuid::Uuid;
 
 pub struct Deployer {
     docker: DockerClient,
@@ -31,16 +31,15 @@ impl Deployer {
         Ok(Self { docker, ports, db })
     }
 
-    pub async fn deploy(&mut self, task_name: &str)
-                        -> Result<DeployResult, DeployError>
-    {
+    pub async fn deploy(&mut self, task_name: &str) -> Result<DeployResult, DeployError> {
         let cfg = get_config();
-        let task_cfg = cfg.tasks
-            .get(task_name)
-            .unwrap_or(&cfg.tasks["_default"]);
+        let task_cfg = cfg.tasks.get(task_name).unwrap_or(&cfg.tasks["_default"]);
 
         // 1. Reserve port
-        let port = self.ports.reserve_port(Some(cfg.ports.default_ttl_secs)).await?;
+        let port = self
+            .ports
+            .reserve_port(Some(cfg.ports.default_ttl_secs))
+            .await?;
 
         // 2. Build image (unchanged)
         let tag = format!("ctf-{}-{}", task_name, Uuid::new_v4());
@@ -58,42 +57,54 @@ impl Deployer {
                     let mut m = HashMap::new();
                     m.insert(
                         format!("{}/tcp", task_cfg.container_port),
-                        Some(vec![PortBinding{ host_ip: Some("0.0.0.0".into()), host_port: Some(port.to_string()) }])
+                        Some(vec![PortBinding {
+                            host_ip: Some("0.0.0.0".into()),
+                            host_port: Some(port.to_string()),
+                        }]),
                     );
                     m
                 });
-                let opts = CreateContainerOptions { name: Some(tag.clone()) , platform: "".to_string()};
-                let cfg = bollard::models::ContainerCreateBody{
-                    image: Some(tag.clone()), host_config: Some(hc), ..Default::default()
+                let opts = CreateContainerOptions {
+                    name: Some(tag.clone()),
+                    platform: "".to_string(),
+                };
+                let cfg = bollard::models::ContainerCreateBody {
+                    image: Some(tag.clone()),
+                    host_config: Some(hc),
+                    ..Default::default()
                 };
                 self.docker.create_container(opts, cfg).await?
-            },
+            }
             "traefik" => {
                 // Traefik routing: no host port. Use labels + network
                 let mut labels = HashMap::new();
                 labels.insert("traefik.enable".into(), "true".into());
                 // HTTP or TCP router
-                if task_cfg.protocol=="http" {
+                if task_cfg.protocol == "http" {
                     labels.insert(
                         format!("traefik.http.routers.{}.rule", unique),
-                        format!("Host(`{}`)", hostname)
+                        format!("Host(`{}`)", hostname),
+                    );
+                    labels.insert(
+                        format!("traefik.http.routers.{}.entrypoints", unique),
+                        get_config().routing.http_entry.clone(),
                     );
                     labels.insert(
                         format!("traefik.http.services.{}.loadbalancer.server.port", unique),
-                        task_cfg.container_port.to_string()
+                        task_cfg.container_port.to_string(),
                     );
                 } else {
                     labels.insert(
                         format!("traefik.tcp.routers.{}.entryPoints", unique),
-                        cfg.routing.tcp_entry.clone()
+                        cfg.routing.tcp_entry.clone(),
                     );
                     labels.insert(
                         format!("traefik.tcp.routers.{}.rule", unique),
-                        format!("HostSNI(`{}`)", hostname)
+                        format!("HostSNI(`{}`)", hostname),
                     );
                     labels.insert(
                         format!("traefik.tcp.services.{}.loadbalancer.server.port", unique),
-                        task_cfg.container_port.to_string()
+                        task_cfg.container_port.to_string(),
                     );
                 }
                 let hc = HostConfig {
@@ -101,13 +112,18 @@ impl Deployer {
                     annotations: Some(labels.clone()),
                     ..Default::default()
                 };
-                let opts = CreateContainerOptions { name: Some(tag.clone()) , platform: "".to_string()};
+                let opts = CreateContainerOptions {
+                    name: Some(tag.clone()),
+                    platform: "".to_string(),
+                };
                 let cfg = bollard::models::ContainerCreateBody {
-                    image: Some(tag.clone()), host_config: Some(hc), ..Default::default()
+                    image: Some(tag.clone()),
+                    host_config: Some(hc),
+                    ..Default::default()
                 };
                 self.docker.create_container(opts, cfg).await?
-            },
-            v => return Err(DeployError::Config(format!("unknown routing {}",v))),
+            }
+            v => return Err(DeployError::Config(format!("unknown routing {}", v))),
         };
 
         // 4. Start it
@@ -118,37 +134,44 @@ impl Deployer {
         // 5. Compute expiry, record in DB
         let expires_at = compute_expiry(cfg.ports.default_ttl_secs);
         let inst = TaskInstance {
-            id:       0,
+            id: 0,
             task_name: task_name.into(),
             container_id: container_id.clone(),
             port,
             created_at: Utc::now(),
             expires_at,
             status: InstanceStatus::Running,
-            user_id: 0,  // API layer will overwrite
+            user_id: 0, // API layer will overwrite
         };
 
         // 6. Construct the endpoint string
         let endpoint = match cfg.routing.variant.as_str() {
             "port" => {
-                let proto = if task_cfg.protocol=="tcp" { "nc" } else { "http" };
-                if task_cfg.protocol=="http" {
+                let proto = if task_cfg.protocol == "tcp" {
+                    "nc"
+                } else {
+                    "http"
+                };
+                if task_cfg.protocol == "http" {
                     format!("http://{}:{}", cfg.routing.domain, port)
                 } else {
                     format!("nc {} {}", cfg.routing.domain, port)
                 }
-            },
+            }
             "traefik" => {
-                if task_cfg.protocol=="http" {
+                if task_cfg.protocol == "http" {
                     format!("http://{}", hostname)
                 } else {
                     format!("nc {} {}", hostname, cfg.routing.tcp_entry)
                 }
-            },
+            }
             _ => unreachable!(),
         };
 
-        Ok(DeployResult { instance: inst, endpoint })
+        Ok(DeployResult {
+            instance: inst,
+            endpoint,
+        })
     }
 
     pub async fn stop(&mut self, inst: &TaskInstance) -> Result<(), DeployError> {

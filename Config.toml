@@ -1,7 +1,7 @@
 [ports]
 min = 3000
 max = 4000
-default = 80
+default = 3000
 default_ttl_secs = 1800
 extend_time_secs = 600
 
@@ -35,12 +35,12 @@ tcp_entry      = "tcp"          # traefik TCP entrypoint name
 # Global defaults (optional, task entries override)
 [tasks._default]
 protocol       = "http"         # "http" or "tcp"
-container_port = 80
+container_port = 3000
 
 # Per-task overrides:
 [tasks.foo_task]
 protocol       = "http"
-container_port = 80
+container_port = 3000
 
 [tasks.bar_pwn]
 protocol       = "tcp"
