@@ -2,7 +2,7 @@ mod docker;
 pub mod error;
 
 use crate::error::DeployError;
-use bollard::models::{HostConfig, PortBinding};
+use bollard::models::{ContainerCreateBody, HostConfig, PortBinding};
 use bollard::query_parameters::CreateContainerOptions;
 use bollard::query_parameters::StartContainerOptions;
 use chrono::Utc;
@@ -20,8 +20,7 @@ pub struct Deployer {
     db: Db,
 }
 pub struct DeployResult {
-    pub instance: TaskInstance,
-    pub endpoint: String,
+    pub instance: TaskInstance
 }
 impl Deployer {
     pub async fn new() -> Result<Self, DeployError> {
@@ -33,24 +32,29 @@ impl Deployer {
 
     pub async fn deploy(&mut self, task_name: &str) -> Result<DeployResult, DeployError> {
         let cfg = get_config();
-        let task_cfg = cfg.tasks.get(task_name).unwrap_or(&cfg.tasks["_default"]);
+        let task_cfg = cfg
+            .tasks
+            .get(task_name)
+            .unwrap_or(&cfg.tasks["_default"]);
 
-        // 1. Reserve port
+        // 1. Reserve a host port (only used in "port" mode)
         let port = self
             .ports
             .reserve_port(Some(cfg.ports.default_ttl_secs))
             .await?;
 
-        // 2. Build image (unchanged)
+        // 2. Build the image
         let tag = format!("ctf-{}-{}", task_name, Uuid::new_v4());
         self.docker.build_image(task_name, &tag).await?;
 
-        // 3. Create & start container
+        // 3. Generate a unique token & hostname (for Traefik mode)
         let unique = Uuid::new_v4().simple().to_string();
         let hostname = format!("{}.{}", unique, cfg.routing.traefik_domain);
+
+        // 4. Create the container
         let container_id = match cfg.routing.variant.as_str() {
             "port" => {
-                // Port routing: publish host port = port
+                // bind container_port → host:port
                 let mut hc = HostConfig::default();
                 hc.network_mode = Some("bridge".into());
                 hc.port_bindings = Some({
@@ -64,94 +68,80 @@ impl Deployer {
                     );
                     m
                 });
-                let opts = CreateContainerOptions {
-                    name: Some(tag.clone()),
-                    platform: "".to_string(),
-                };
-                let cfg = bollard::models::ContainerCreateBody {
+
+                let opts = CreateContainerOptions { name: Some(tag.clone()), platform: "".to_string()};
+                let body = ContainerCreateBody {
                     image: Some(tag.clone()),
                     host_config: Some(hc),
                     ..Default::default()
                 };
-                self.docker.create_container(opts, cfg).await?
+                self.docker.create_container(opts, body).await?
             }
+
             "traefik" => {
-                // Traefik routing: no host port. Use labels + network
+                // no published ports, just labels + custom network
                 let mut labels = HashMap::new();
                 labels.insert("traefik.enable".into(), "true".into());
-                // HTTP or TCP router
+                labels.insert(
+                    format!("traefik.docker.network"),
+                    "ctf-net".into(),
+                );
+
                 if task_cfg.protocol == "http" {
+                    // HTTP router
                     labels.insert(
                         format!("traefik.http.routers.{}.rule", unique),
                         format!("Host(`{}`)", hostname),
                     );
                     labels.insert(
                         format!("traefik.http.routers.{}.entrypoints", unique),
-                        get_config().routing.http_entry.clone(),
+                        cfg.routing.http_entry.clone(),
                     );
                     labels.insert(
                         format!("traefik.http.services.{}.loadbalancer.server.port", unique),
                         task_cfg.container_port.to_string(),
                     );
                 } else {
-                    labels.insert(
-                        format!("traefik.tcp.routers.{}.entrypoints", unique),
-                        cfg.routing.tcp_entry.clone(),
-                    );
+                    // TCP router
                     labels.insert(
                         format!("traefik.tcp.routers.{}.rule", unique),
                         format!("HostSNI(`{}`)", hostname),
+                    );
+                    labels.insert(
+                        format!("traefik.tcp.routers.{}.entrypoints", unique),
+                        cfg.routing.tcp_entry.clone(),
                     );
                     labels.insert(
                         format!("traefik.tcp.services.{}.loadbalancer.server.port", unique),
                         task_cfg.container_port.to_string(),
                     );
                 }
+
                 let hc = HostConfig {
                     network_mode: Some("ctf-net".into()),
                     ..Default::default()
                 };
-                let opts = CreateContainerOptions {
-                    name: Some(tag.clone()),
-                    platform: "".to_string(),
-                };
-                let cfg = bollard::models::ContainerCreateBody {
+                let opts = CreateContainerOptions { name: Some(tag.clone()), platform: "".to_string() };
+                let body = ContainerCreateBody {
                     image: Some(tag.clone()),
-                    labels: Some(labels.clone()),
+                    labels: Some(labels),
                     host_config: Some(hc),
                     ..Default::default()
                 };
-                self.docker.create_container(opts, cfg).await?
+                self.docker.create_container(opts, body).await?
             }
+
             v => return Err(DeployError::Config(format!("unknown routing {}", v))),
         };
 
-        // 4. Start it
+        // 5. Start the container
         self.docker
             .start_container(&container_id, None::<StartContainerOptions>)
             .await?;
 
-        // 5. Compute expiry, record in DB
-        let expires_at = compute_expiry(cfg.ports.default_ttl_secs);
-        let inst = TaskInstance {
-            id: 0,
-            task_name: task_name.into(),
-            container_id: container_id.clone(),
-            port,
-            created_at: Utc::now(),
-            expires_at,
-            status: InstanceStatus::Running,
-            user_id: 0, // API layer will overwrite
-        };
-
-        // 6. Construct the endpoint string
+        // 6. Compute the client‐facing endpoint URL/command
         let endpoint = match cfg.routing.variant.as_str() {
             "port" => {
-                let proto = if task_cfg.protocol == "tcp" {
-                    "nc"
-                } else {
-                    "http"
-                };
                 if task_cfg.protocol == "http" {
                     format!("http://{}:{}", cfg.routing.domain, port)
                 } else {
@@ -162,16 +152,26 @@ impl Deployer {
                 if task_cfg.protocol == "http" {
                     format!("http://{}", hostname)
                 } else {
-                    format!("nc {} {}", hostname, cfg.routing.tcp_entry)
+                    format!("nc {} {}", hostname, 9000)
                 }
             }
             _ => unreachable!(),
         };
 
-        Ok(DeployResult {
-            instance: inst,
-            endpoint,
-        })
+        // 7. Build the in‐memory TaskInstance (DB insert happens in API layer)
+        let inst = TaskInstance {
+            id: 0,
+            task_name: task_name.to_string(),
+            container_id: container_id.clone(),
+            port,
+            created_at: Utc::now(),
+            expires_at: compute_expiry(cfg.ports.default_ttl_secs),
+            status: InstanceStatus::Running,
+            endpoint: endpoint.clone(),
+            user_id: 0, // will be set by create_instance_for_user
+        };
+
+        Ok(DeployResult { instance: inst })
     }
 
     pub async fn stop(&mut self, inst: &TaskInstance) -> Result<(), DeployError> {
