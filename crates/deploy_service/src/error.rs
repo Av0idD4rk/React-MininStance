@@ -10,8 +10,6 @@ pub enum DeployError {
     Service(#[from] ServiceError),
     #[error("build failed: {0}")]
     Build(String),
-    #[error("port manager error: {0}")]
-    Port(#[from] port_manager::PortError),
     #[error("i/o error: {0}")]
     Io(#[from] std::io::Error),
     /// Configuration or routing‐variant error

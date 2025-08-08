@@ -45,7 +45,6 @@ impl Db {
         let new_inst = NewInstance {
             task_name: inst.task_name.clone(),
             container_id: inst.container_id.clone(),
-            port: inst.port as i32,
             expires_at: inst.expires_at,
             status: inst.status.as_str().to_string(),
             endpoint: inst.endpoint.clone(),
@@ -78,12 +77,7 @@ impl Db {
             .optional()?;
         Ok(row.map(|r| r.into()))
     }
-    pub fn find_by_port(&self, port_: i32) -> Result<Option<TaskInstance>, ServiceError> {
-        use crate::schema::instances::dsl::*;
-        let mut c = self.get_conn()?;
-        let opt = instances.filter(port.eq(port_)).first::<RowInstance>(&mut c).optional()?;
-        Ok(opt.map(|r| r.into()))
-    }
+
     pub fn count_running_instances_for_user(&self, uid: i32) -> Result<i64, ServiceError> {
         use crate::schema::instances::dsl::*;
         let mut c = self.get_conn()?;
@@ -107,7 +101,6 @@ impl Db {
         let new_inst = NewInstance {
             task_name: inst.task_name.clone(),
             container_id: inst.container_id.clone(),
-            port: inst.port as i32,
             expires_at: inst.expires_at,
             status: inst.status.as_str().to_string(),
             endpoint: inst.endpoint.clone(),
@@ -228,6 +221,30 @@ impl Db {
             created_at: r.created_at,
         }))
     }
+    pub fn list_expired_instances(
+        &self,
+        now: DateTime<Utc>,
+    ) -> Result<Vec<TaskInstance>, ServiceError> {
+        use crate::schema::instances::dsl::*;
+        let mut conn = self.get_conn()?;
+        let rows: Vec<RowInstance> = instances
+            .filter(status.eq(InstanceStatus::Running.as_str()))
+            .filter(expires_at.lt(now))
+            .load(&mut conn)?;
+        Ok(rows.into_iter().map(Into::into).collect())
+    }
+    pub fn update_instance_status(
+        &self,
+        inst_id: i32,
+        new_status: InstanceStatus,
+    ) -> Result<(), ServiceError> {
+        use crate::schema::instances::dsl::*;
+        let mut conn = self.get_conn()?;
+        diesel::update(instances.filter(id.eq(inst_id)))
+            .set(status.eq(new_status.as_str()))
+            .execute(&mut conn)?;
+        Ok(())
+    }
     pub fn ensure_task(&self, name: &str, dockerfile_path: &str) -> Result<(), ServiceError> {
         use crate::schema::tasks;
         let mut conn = self.get_conn()?;
@@ -276,7 +293,6 @@ pub mod schema {
             id -> Int4,
             task_name -> Text,
             container_id -> Text,
-            port -> Int4,
             created_at -> Timestamptz,
             expires_at -> Timestamptz,
             status -> Text,
@@ -329,7 +345,6 @@ struct RowInstance {
     id: i32,
     task_name: String,
     container_id: String,
-    port: i32,
     created_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,
     status: String,
@@ -342,7 +357,6 @@ struct RowInstance {
 struct NewInstance {
     task_name: String,
     container_id: String,
-    port: i32,
     expires_at: DateTime<Utc>,
     status: String,
     endpoint: String,
@@ -354,7 +368,6 @@ impl From<(&TaskInstance, i32)> for NewInstance {
         NewInstance {
             task_name: t.task_name.clone(),
             container_id: t.container_id.clone(),
-            port: t.port as i32,
             expires_at: t.expires_at,
             status: t.status.as_str().to_string(),
             user_id: uid,
@@ -370,7 +383,6 @@ impl From<RowInstance> for TaskInstance {
             id: r.id,
             task_name: r.task_name,
             container_id: r.container_id,
-            port: r.port as u16,
             created_at: r.created_at,
             expires_at: r.expires_at,
             status: match r.status.as_str() {

@@ -19,8 +19,6 @@ pub enum ConfigError {
 
 #[derive(Deserialize)]
 pub struct RoutingConfig {
-    pub variant: String,           // "port" | "traefik"
-    pub domain: String,            // e.g. "localhost"
     pub traefik_domain: String,    // e.g. "ctf.local"
     pub http_entry: String,        // e.g. "web"
     pub tcp_entry: String,         // e.g. "tcp"
@@ -42,7 +40,6 @@ pub struct Config {
     pub tasks: std::collections::HashMap<String, TaskConfig>,
     pub ports: Ports,
     pub database: Database,
-    pub redis: Redis,
     pub captcha: Captcha,
     pub scheduler: Scheduler,
     pub sessions: Sessions,
@@ -53,7 +50,6 @@ pub struct Config {
 pub struct Ports {
     pub min: u16,
     pub max: u16,
-    pub default: u16,
     pub default_ttl_secs: u64,
     pub extend_time_secs: u64,
 }
@@ -68,10 +64,6 @@ pub struct Database {
     pub url: String,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct Redis {
-    pub url: String,
-}
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Sessions {
@@ -130,7 +122,6 @@ where
     Ok(dur.as_secs() as i64)  // bytes interpreted as seconds numerically
 }
 
-/// Lazily load & parse the config once
 static CONFIG: Lazy<Config> = Lazy::new(|| {
     let path = find_config_file().expect("Config.toml not found");
     let toml_str = fs::read_to_string(&path)
@@ -139,7 +130,6 @@ static CONFIG: Lazy<Config> = Lazy::new(|| {
         .unwrap_or_else(|e| panic!("invalid TOML in {}: {}", path.display(), e))
 });
 
-/// Public accessor
 pub fn get_config() -> &'static Config {
     &CONFIG
 }

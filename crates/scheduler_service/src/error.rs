@@ -1,7 +1,6 @@
 use thiserror::Error;
 use common::ServiceError;
 use deploy_service::error::DeployError;
-use port_manager::PortError;
 
 #[derive(Debug, Error)]
 pub enum SchedulerError {
@@ -11,6 +10,4 @@ pub enum SchedulerError {
     #[error("deploy error: {0}")]
     Deploy(#[from] DeployError),
 
-    #[error("port manager error: {0}")]
-    Port(#[from] PortError),
 }

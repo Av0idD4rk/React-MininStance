@@ -2,6 +2,7 @@ networks:
   ctf-net:
     name: ctf-net
   data: {}
+
 services:
   traefik:
     image: traefik:latest
@@ -44,19 +45,6 @@ services:
       - ./userlist.txt:/etc/pgbouncer/userlist.txt:ro
     networks:
       - data
-  redis:
-    image: redis:latest
-    command: ["redis-server", "--save", ""]
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
-    networks:
-      - data
 
   api_gateway:
     build:
@@ -66,12 +54,9 @@ services:
     image: ctf-api-gateway
     container_name: ctf-api-gateway
     depends_on:
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
+      pgbouncer:
+        condition: service_started
     environment:
-      REDIS_URL: "redis://redis:6379/0"
       DATABASE_URL: "postgres://ctf:ctf_pass@pgbouncer:6432/ctf_deploy"
     ports:
       - "8080:8080"
@@ -91,12 +76,9 @@ services:
     image: ctf-scheduler
     container_name: ctf-scheduler
     depends_on:
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
+      pgbouncer:
+        condition: service_started
     environment:
-      REDIS_URL: "redis://redis:6379/0"
       DATABASE_URL: "postgres://ctf:ctf_pass@pgbouncer:6432/ctf_deploy"
     networks:
       - data
@@ -104,7 +86,22 @@ services:
     volumes:
       - ./:/app
       - /var/run/docker.sock:/var/run/docker.sock
+  frontend:
+    build:
+      context: ./frontend                     # repo root
+      dockerfile: Dockerfile.frontend
+      target: production
+    image: ctf-frontend:latest      # optional tag
+    ports:
+      - "6030:3000"                  # host:container
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: "http://ctf.av0idd4rk.ru:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6030/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   db_data:
-  redis_data:

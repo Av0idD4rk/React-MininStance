@@ -1,6 +1,9 @@
+mod error;
+
 use common::init_logging;
 use tracing::{info, error};
-use scheduler_service::{run, error::SchedulerError};
+use scheduler_service::run;
+use crate::error::SchedulerError;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
