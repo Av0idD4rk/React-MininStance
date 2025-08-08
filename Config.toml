@@ -38,8 +38,6 @@ max_instances = 2
 
 
 [routing]
-variant        = "traefik"         # or "traefik"
-domain         = "localhost"    # for port-variant
 traefik_domain = "ctf.av0idd4rk.ru"    # for traefik-variant
 http_entry     = "web"          # traefik HTTP entrypoint name
 tcp_entry      = "tcp"          # traefik TCP entrypoint name

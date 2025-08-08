@@ -19,8 +19,6 @@ pub enum ConfigError {
 
 #[derive(Deserialize)]
 pub struct RoutingConfig {
-    pub variant: String,           // "port" | "traefik"
-    pub domain: String,            // e.g. "localhost"
     pub traefik_domain: String,    // e.g. "ctf.local"
     pub http_entry: String,        // e.g. "web"
     pub tcp_entry: String,         // e.g. "tcp"
